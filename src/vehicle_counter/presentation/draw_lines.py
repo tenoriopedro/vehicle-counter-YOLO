@@ -1,5 +1,6 @@
 import cv2
-from cv2.typing import MatLike
+import numpy as np
+import numpy.typing as npt
 
 
 class LineCalibrator:
@@ -12,7 +13,7 @@ class LineCalibrator:
 
         self.line_points: list[tuple[int, int]] = []
         self.window_name = window_name
-        self.frame: MatLike | None = None
+        self.frame: npt.NDArray[np.uint8] | None = None
 
     def handle_click(
         self, event: int, x: int, y: int, flags: int, param: object
@@ -47,7 +48,7 @@ class LineCalibrator:
 
             cv2.imshow(self.window_name, frame_temp)
 
-    def run(self, frame: MatLike) -> list[tuple[int, int]]:
+    def run(self, frame: npt.NDArray[np.uint8]) -> list[tuple[int, int]]:
         """
         Executes the blocking UI render loop, allowing the user
         to draw the calibration line.
