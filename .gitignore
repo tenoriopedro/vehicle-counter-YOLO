@@ -1,7 +1,6 @@
 
 /data/processed
-scripts.txt
-z-ignored_files/
+project_notes/
 .tmp_*/
 kernel.errors.txt
 
