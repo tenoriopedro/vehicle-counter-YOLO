@@ -1,98 +1,99 @@
-# 🚦 Pipeline de Telemetria de Tráfego (YOLOv8 + OpenVINO + PyArrow)
+# 🚦 Traffic Telemetry Pipeline: Edge-to-Cloud Data Lake (YOLOv8 + Kafka + AWS S3)
 
-## 🚀 Visão Geral
+## 🚀 The Engineering Challenge & Solution
 
-Este sistema atua como um produtor e consumidor de telemetria de tráfego, desenhado sob a topologia de um _Data Lake_ moderno. Em vez de escrever ficheiros estáticos localmente, o sistema extrai dados de movimento vetorial em tempo real, emite-os para um _Message Broker_ distribuído e ingere-os na nuvem em lotes otimizados
+**The Problem:** Monitoring traffic in real-time typically presents two catastrophic infrastructural bottlenecks. Sending raw video streams to the cloud drains network bandwidth and incurs massive compute costs. Conversely, processing data locally on edge devices usually leads to Out-Of-Memory (OOM) crashes and disk I/O bottlenecks.
 
-A arquitetura baseia-se numa separação estrita de responsabilidades:
+**The Solution:** This system decouples visual inference from data persistence. It operates directly on edge hardware, extracting only vector movement metadata (dropping the heavy video frames). It then micro-batches these events in memory and streams them asynchronously to an AWS Data Lake in a highly compressed columnar format.
 
-| Camada                    | Tecnologia        | Responsabilidade                                                                         |
-| :------------------------ | :---------------- | :--------------------------------------------------------------------------------------- |
-| **Visão (Produtor)**      | YOLOv8 + OpenVINO | Rastreamento espacial e inferência, com escoamento assíncrono para a placa de rede.      |
-| **Rede (Broker)**         | Confluent Kafka   | Absorção de picos de tráfego e imobilização cronológica de eventos (Tópico).             |
-| **Ingestão (Consumidor)** | PyArrow + Boto3   | Subscrição de rede, acumulação na memória RAM e conversão colunar para a nuvem (AWS S3). |
-| **Domínio (Contratos)**   | Pydantic          | Garantia de tipagem estrita de todos os eventos JSON, prevenindo estruturas órfãs.       |
+The architecture is built upon a strict separation of concerns:
 
-### 🎯 Funcionalidades
+| Layer                    | Technology        | Responsibility                                                                               |
+| :----------------------- | :---------------- | :------------------------------------------------------------------------------------------- |
+| **Vision (Producer)**    | YOLOv8 + OpenVINO | Spatial tracking and inference, with asynchronous data offloading to the network interface.  |
+| **Network (Broker)**     | Confluent Kafka   | Traffic spike absorption and chronological event immobilization (Topic).                     |
+| **Ingestion (Consumer)** | PyArrow + Boto3   | Network subscription, RAM micro-batching, and columnar conversion to the cloud (AWS S3).     |
+| **Domain (Contracts)**   | Pydantic          | Strict type guarantee for all JSON events, preventing orphaned or corrupted data structures. |
 
-- Extração espacial e classificação estruturada (Carros, Motociclos, Autocarros, Camiões).
-- Streaming assíncrono: O motor visual nunca bloqueia à espera de I/O, garantindo FPS máximo.
-- Gestão de rede resiliente: Retenção de eventos não entregues no _buffer_ C do Kafka em caso de falhas.
-- Arquitetura _Cloud-Native_: A agregação ocorre em memória com injeção direta no armazenamento de objetos (S3) no formato comprimido **Parquet**
+### 🎯 Core Business Value
+
+- **Zero Cloud Compute for Vision:** Heavy GPU/CPU bounding box math is done at the edge; the cloud only receives clean analytics.
+- **Cost-Optimized Storage:** Direct RAM-to-S3 injection in **Parquet** format means AWS Athena queries cost fractions of a cent compared to raw JSON/CSV scans.
+- **Fail-Safe Streaming:** The visual engine never blocks waiting for I/O operations. Network failures are caught by Kafka's underlying C buffer, guaranteeing maximum FPS and zero data loss.
 
 ---
 
-## ⚙️ Arquitetura Alvo e Instalação
+## ⚙️ Target Architecture & Installation
 
-O pipeline é encapsulado pelo [uv](https://github.com/astral-sh/uv), exigindo Python 3.11.9+
+The pipeline is entirely encapsulated by [uv](https://github.com/astral-sh/uv), requiring Python 3.11.9+
 
-### 1. Perfil Principal: Linux / Hardware Intel (Recomendado)
+### 1. Primary Profile: Linux / Intel Hardware (Recommended)
 
-Para ativar a aceleração nativa na GPU integrada e evitar o estrangulamento do processador na descodificação H.264:
+To enable native acceleration on integrated GPUs and prevent CPU bottlenecking during H.264 decoding:
 
 ```bash
 sudo apt update
 sudo apt install intel-opencl-icd ffmpeg
 ```
 
-_(Se utiliza Mac, Windows ou gráfica NVIDIA, ignore este passo; o instalador `uv` encarrega-se do ambiente)._
+_(If operating on macOS, Windows, or with dedicated NVIDIA hardware, ignore this step; the `uv` installer manages the runtime environment)._
 
-### 2. Sincronização do Ambiente
+### 2. Environment Synchronization
 
-Executa a clonagem do repositório e a sincronização rigorosa do ambiente virtual:
+Clone the repository and enforce strict virtual environment synchronization:
 
 ```bash
-git clone https://github.com/tenoriopedro/vehicle-counter-YOLO.git
+git clone [https://github.com/tenoriopedro/vehicle-counter-YOLO.git](https://github.com/tenoriopedro/vehicle-counter-YOLO.git)
 cd vehicle-counter
 uv sync
 ```
 
-### 3. Cofre de Credenciais e Infraestrutura
+### 3. Credentials Vault & Infrastructure
 
-A escrita direta na nuvem exige autorização programática. Crie um ficheiro `.env` na raiz do projeto (nunca comitado) com a seguinte estrutura:
+Direct cloud ingestion requires programmatic authorization. Create a `.env` file at the project root (never committed) with the following structure:
 
 ```ini
-AWS_ACCESS_KEY_ID=sua_access_key
-AWS_SECRET_ACCESS_KEY=sua_secret_key
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_DEFAULT_REGION=us-east-1
-S3_BUCKET_NAME=seu-bucket-de-telemetria
+S3_BUCKET_NAME=your-telemetry-bucket
 ```
 
-## 📂 Contrato de Dados (Obrigatório)
+## 📂 Data Contract (Mandatory)
 
-O vídeo fonte deve ser isolado num **Contexto** dentro do diretório `data/raw/`. A estrutura não tolerará ficheiros avulsos.
+The source video must be isolated within a **Context** directory inside `data/raw/`. The system strictly rejects unstructured files to guarantee telemetry integrity.
 
 ```text
 data/raw/
-└── avenida_norte/
-    └── avenida_norte.mp4  <-- O vídeo tem de assumir este nome exato
+└── north_avenue/
+    └── north_avenue.mp4  <-- The video file must assume this exact name
 ```
 
-## 🛠️ Fluxo de Execução (Microsserviços)
+## 🛠️ Execution Flow (Microservices)
 
-A arquitetura exige a execução de processos isolados. Levante primeiro a infraestrutura de rede:
+The architecture mandates the execution of isolated processes. Boot up the network infrastructure first:
 
 ```bash
 docker-compose up -d
 ```
 
-### Serviço A: Orquestrador Visual (O Produtor)
+### Service A: Visual Orchestrator (The Producer)
 
-Inicia a janela interativa de calibração espacial, seguida do rastreamento direcionado. A telemetria é emitida para a porta `9092` no tópico `vehicle-telemetry`.
+Initiates the interactive spatial calibration window, followed by targeted tracking. Telemetry is asynchronously emitted to port `9092` under the `vehicle-telemetry` topic.
 
 ```bash
-# 1. Calibrar a via
-uv run vehicle-calibrate --context <nome_do_contexto>
+# 1. Calibrate the counting line
+uv run vehicle-calibrate --context <context_name>
 
-# 2. Iniciar a emissão (Streaming)
-uv run vehicle-counter --context <nome_do_contexto> -m <caminho/para/modelo>
+# 2. Initiate inference and network streaming
+uv run vehicle-counter --context <context_name> -m <path/to/model/weights>
 ```
 
-### Serviço B: Motor de Ingestão (O Consumidor)
+### Service B: Ingestion Engine (The Consumer)
 
-Num terminal paralelo, inicie o _daemon_ que escuta a placa de rede, agrupa os eventos em _micro-batches_ e converte-os em tabelas Parquet que são enviadas para o S3.
+In a parallel terminal session, launch the daemon that subscribes to the network interface, aggregates events into micro-batches, and orchestrates the columnar conversion to S3.
 
 ```bash
-# (Comando provisório de desenvolvimento)
+# (Temporary development command)
 uv run python src/vehicle_counter/consumer/kafka_to_s3.py
 ```
