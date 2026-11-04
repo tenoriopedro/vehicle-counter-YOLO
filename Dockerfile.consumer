@@ -3,9 +3,9 @@ FROM python:3.11.9-slim
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --system
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --locked
 
 COPY ./src ./src
 
-ENTRYPOINT [ "python", "src/vehicle_counter/consumer/kafka_to_s3.py" ]
+ENTRYPOINT [ "uv", "run", "python", "src/vehicle_counter/consumer/kafka_to_s3.py" ]

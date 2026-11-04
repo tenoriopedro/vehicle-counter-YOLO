@@ -5,8 +5,8 @@ RUN apt-get update && apt-get install ffmpeg intel-opencl-icd -y --no-install-re
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --system
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --locked
 
 COPY ./src ./src
 
