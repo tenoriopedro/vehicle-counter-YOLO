@@ -1,4 +1,5 @@
 import json
+import os
 
 from confluent_kafka import Producer
 
@@ -14,16 +15,19 @@ class TelemetrySink:
 
     def __init__(
         self,
-        bootstrap_servers: str = "localhost:9092",
+        bootstrap_servers: str | None = None,
         topic: str = "vehicle-telemetry",
     ) -> None:
         self.topic = topic
+        kafka_host = bootstrap_servers or os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
+        )
 
         # Additional configuration for retries and acks
         # should be added here for production.
         self.producer = Producer(
             {
-                "bootstrap.servers": bootstrap_servers,
+                "bootstrap.servers": kafka_host,
             }
         )
 

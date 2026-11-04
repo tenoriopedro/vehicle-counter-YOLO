@@ -81,13 +81,14 @@ class TelemetryConsumer:
 if __name__ == "__main__":
     load_dotenv()
     bucket_name = os.getenv("S3_BUCKET_NAME")
+    bootstrap_server = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 
     writer = S3ParquetWriter(bucket_name)
 
     print("Starting telemetry consumer..")
 
     consumer = TelemetryConsumer(
-        bootstrap_server="localhost:9092",
+        bootstrap_server=bootstrap_server,
         topic="vehicle-telemetry",
         group_id="s3-ingestion-group",
         writer=writer,
