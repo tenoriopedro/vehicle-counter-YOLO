@@ -3,35 +3,48 @@ services:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
     environment:
-      - ZOOKEEPER_CLIENT_PORT: 2181
+      - ZOOKEEPER_CLIENT_PORT=2181
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: vehicle-kafka
     environment:
-      - KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
-      - KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
     ports:
       - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9092'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   producer:
     build:
       context: .
       dockerfile: Dockerfile.producer
-
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     volumes:
       - ./data/raw:/app/data/raw
+      - ./models:/app/models
+      - ./src:/app/src
+    devices:
+      - /dev/dri:/dev/dri
     depends_on:
-      - kafka
-      - zookeeper
+      kafka:
+        condition: service_healthy
 
   consumer:
     build:
       context: .
       dockerfile: Dockerfile.consumer
-
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    volumes:
+      - ./src:/app/src
     env_file:
       - ./.env
     depends_on:
-      - kafka
-      - zookeeper
+      kafka:
+        condition: service_healthy
