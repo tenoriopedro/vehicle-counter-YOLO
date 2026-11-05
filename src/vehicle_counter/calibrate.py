@@ -1,4 +1,6 @@
 import argparse
+import logging
+import os
 import sys
 from pathlib import Path
 
@@ -6,7 +8,12 @@ from vehicle_counter.io.config import save_config
 from vehicle_counter.io.video import load_frame
 from vehicle_counter.presentation.draw_lines import LineCalibrator
 
-DATA_PATH = Path.cwd() / "data/raw"
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(os.getenv("VEHICLE_DATA_DIR", Path.cwd() / "data/raw"))
 
 
 def main() -> int:
@@ -24,35 +31,34 @@ def main() -> int:
         "-c",
         "--context",
         type=Path,
-        help="Name of the context folder inside data/raw/",
+        help="Name of the context folder. Resolved against $VEHICLE_DATA_DIR",
         required=True,
     )
 
     args = parser.parse_args()
 
-    context_path = DATA_PATH / args.context
+    context_path = DATA_DIR / args.context
     video_path = context_path / args.context.with_suffix(".mp4")
     json_file = context_path / args.context.with_suffix(".json")
 
     # Strict Physical Validation (Fail Fast)
     if not video_path.is_file():
-        print(f"Critical Error: Video file not found at {video_path}", file=sys.stderr)
+        logger.error("Critical Error: Video file not found at %s", video_path)
         return 1
 
     frame = load_frame(video_path)
 
     calibrator = LineCalibrator(window_name=f"Calibration: {args.context.name}")
-    line_points = calibrator.run(frame)
+    line_points = calibrator.run(frame)  # type: ignore[reportArgumentType]
 
     if len(line_points) != 2:
-        print(
-            "Calibration aborted or incomplete. Exactly two points are required",
-            file=sys.stderr,
+        logger.error(
+            "Calibration aborted or incomplete. Exactly two points are required."
         )
         return 1
 
     save_config(json_file, line_points)
-    print(f"Calibration successful! Configuration saved to '{json_file}'")
+    logger.info("Calibration successful! Configuration saved to '%s'", json_file)
     return 0
 
 

@@ -5,6 +5,8 @@ over the raw video frames to validate spatial alignment in real-time.
 """
 
 import argparse
+import logging
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +15,13 @@ from ultralytics import YOLO
 
 from vehicle_counter.io.config import load_config
 
-DATA_PATH = Path.cwd() / "data/raw"
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# Decoupled data directory. Respects container environments or local fallbacks.
+DATA_DIR = Path(os.getenv("VEHICLE_DATA_DIR", Path.cwd() / "data/raw"))
 
 
 def run(
@@ -25,7 +33,7 @@ def run(
     Validates physical inputs before allocating the model to memory.
     """
 
-    context_path = DATA_PATH / context_name
+    context_path = DATA_DIR / context_name
     video_path = context_path / context_name.with_suffix(".mp4")
     json_file = context_path / context_name.with_suffix(".json")
 
@@ -104,10 +112,7 @@ def main() -> int:
         "-c",
         "--context",
         type=Path,
-        help="""
-        Name of the context folder inside data/raw/.
-        The system expects data/raw/<context>/<context>.mp4 and <context>.json to exist.
-        """,
+        help="Name of the context folder. Resolved against $VEHICLE_DATA_DIR.",
         required=True,
     )
     parser.add_argument(
@@ -121,18 +126,19 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.model.exists():
-        print("Error: Model weights file not found", file=sys.stderr)
+        logger.error("Model weights file not found.")
         return 1
 
     try:
         run(args.model, args.context)
 
     except KeyboardInterrupt:
-        print("\nProcess interrupted by user", file=sys.stderr)
+        logger.warning("Process interrupted by user. Shutting down gracefully...")
         return 1
     except (FileNotFoundError, ValueError) as e:
-        # Graceful handling for known domain errors
-        print(f"\n{e}", file=sys.stderr)
+        # Graceful handling for known domain errors to avoid
+        # raw stack traces on the terminal
+        logger.error("%s", e)  # noqa: TRY400
         return 1
 
     return 0
