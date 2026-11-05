@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -14,7 +15,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
-DATA_PATH = Path.cwd() / "data/raw"
+DATA_DIR = Path(os.getenv("VEHICLE_DATA_DIR", Path.cwd() / "data/raw"))
 
 
 def run(
@@ -26,7 +27,7 @@ def run(
     Orchestrates the real-time inference and telemetry streaming pipeline.
     Expects a strict workspace structure: data/raw/<context>/<context>.[mp4|json]
     """
-    context_path = DATA_PATH / context_name
+    context_path = DATA_DIR / context_name
     video_path = context_path / context_name.with_suffix(".mp4")
     json_file = context_path / context_name.with_suffix(".json")
 
@@ -135,7 +136,7 @@ def main() -> int:
     except (FileNotFoundError, ValueError) as e:
         # Graceful handling for known domain errors to avoid
         # raw stack traces on the terminal
-        logger.error("%s", e) # noqa: TRY400
+        logger.error("%s", e)  # noqa: TRY400
         return 1
 
     return 0
