@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 import time
 from pathlib import Path
@@ -9,6 +10,10 @@ from vehicle_counter.io.video import get_video_fps
 from vehicle_counter.services.traffic_analyzer import TrafficCounter
 from vehicle_counter.vision.adapters import build_yolo_stream
 
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 DATA_PATH = Path.cwd() / "data/raw"
 
 
@@ -68,14 +73,11 @@ def run(
         sink.close()
 
     duration = time.time() - start_time
-
-    print("-" * 30)
-    print("STREAMING COMPLETED")
-    print(
-        "Execution Time: "
-        f"{time.strftime('%H hours %M minutes %S seconds', time.gmtime(duration))}"
+    formatted_time = time.strftime(
+        "%H hours %M minutes %S seconds", time.gmtime(duration)
     )
-    print("-" * 30)
+
+    logger.info("STREAMING COMPLETED - Execution Time: %s", formatted_time)
 
 
 def main() -> int:
@@ -121,21 +123,19 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.model.exists():
-        print("Error: Model weights file not found", file=sys.stderr)
+        logger.error("Model weights file not found.")
         return 1
 
     try:
         run(args.model, args.context, args.cls)
 
     except KeyboardInterrupt:
-        print(
-            "\nProcess interrupted by user. Flushing network buffer...", file=sys.stderr
-        )
+        logger.warning("Process interrupted by user. Shutting down gracefully...")
         return 1
     except (FileNotFoundError, ValueError) as e:
         # Graceful handling for known domain errors to avoid
         # raw stack traces on the terminal
-        print(f"\n{e}", file=sys.stderr)
+        logger.error("%s", e) # noqa: TRY400
         return 1
 
     return 0
