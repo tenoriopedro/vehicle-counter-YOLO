@@ -10,7 +10,11 @@ services:
     container_name: vehicle-kafka
     environment:
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
     ports:
       - "9092:9092"
     healthcheck:
@@ -25,12 +29,14 @@ services:
       dockerfile: Dockerfile.producer
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./data/raw:/app/data/raw
       - ./models:/app/models
       - ./src:/app/src
     devices:
       - /dev/dri:/dev/dri
+    privileged: true
     depends_on:
       kafka:
         condition: service_healthy
@@ -41,6 +47,7 @@ services:
       dockerfile: Dockerfile.consumer
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./src:/app/src
     env_file:
