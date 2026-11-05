@@ -34,16 +34,14 @@ class TelemetryConsumer:
         topic: str,
         group_id: str,
         writer: S3ParquetWriter,
-        batch_size: int = 100,
-        flush_timeout: float = 30.0,
     ) -> None:
         self.bootstrap_server: str = bootstrap_server
         self.topic: str = topic
         self.group_id: str = group_id
         self.writer: S3ParquetWriter = writer
 
-        self.batch_size: int = batch_size
-        self.flush_timeout: float = flush_timeout
+        self._batch_size: int = 10000
+        self._flush_timeout: float = 120.0
 
         self.buffer: list[dict[str, Any]] = []
         self.timer: float = time.time()
@@ -110,16 +108,22 @@ class TelemetryConsumer:
         """Evaluates whether the memory buffer satisfies the flushing criteria."""
         if not self.buffer:
             return False
-        return len(self.buffer) >= self.batch_size or elapsed_time >= self.flush_timeout
+        return (
+            len(self.buffer) >= self._batch_size
+            or elapsed_time >= self._flush_timeout
+        )
 
     def _flush_and_commit(self) -> None:
         """
         Persists buffered records to S3 and synchronously commits Kafka offsets.
         Guarantees that messages are never marked as consumed if S3 I/O fails.
         """
+        record_count = len(self.buffer)
         try:
             self.writer.write_batch(self.buffer)
             self.consumer.commit(asynchronous=False)
+
+            logger.info("Persisted batch: %d records sent to S3", record_count)
 
             self.buffer.clear()
             self.timer = time.time()
@@ -144,9 +148,6 @@ if __name__ == "__main__":
     bucket_name: str = os.getenv("S3_BUCKET_NAME", "my-data-lake-telemetry-123")
     bootstrap_server: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 
-    batch_size: int = int(os.getenv("CONSUMER_BATCH_SIZE", "20"))
-    flush_timeout: float = float(os.getenv("CONSUMER_FLUSH_TIMEOUT", "15.0"))
-
     s3_writer: S3ParquetWriter = S3ParquetWriter(bucket_name)
 
     consumer: TelemetryConsumer = TelemetryConsumer(
@@ -154,7 +155,5 @@ if __name__ == "__main__":
         topic="vehicle-telemetry",
         group_id="s3-ingestion-group",
         writer=s3_writer,
-        batch_size=batch_size,
-        flush_timeout=flush_timeout,
     )
     consumer.start_consuming()
