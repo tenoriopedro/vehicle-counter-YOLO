@@ -56,6 +56,8 @@ class TelemetrySink:
             msg = f"Kafka Producer Initialization Error: {exc}"
             raise RuntimeError(msg) from exc
 
+        self._message_count: int = 0
+
     def add(self, event: VehicleEvent) -> None:
         """
         Serializes the domain event and dispatches it asynchronously.
@@ -82,6 +84,13 @@ class TelemetrySink:
                 value=event_bytes,
                 on_delivery=delivery_report,
             )
+
+            self._message_count += 1
+            if self._message_count % 500 == 0:
+                logger.info(
+                    "Heartbeat: %d vehicles enqueued to broker...", self._message_count
+                )
+
             # Process pending callback events in the queue
             self.producer.poll(0)
         except Exception as exc:
@@ -94,6 +103,7 @@ class TelemetrySink:
         """
         Blocks the application shutdown until all queued messages are delivered.
         """
+        logger.info("Draining producer queue. Awaiting broker acknowledgement...")
         remaining: int = self.producer.flush(timeout=10.0)
 
         if remaining > 0:
@@ -102,5 +112,6 @@ class TelemetrySink:
             )
         else:
             logger.info(
-                "All messages in the queue have been acknowledged by the broker."
+                "Successfully delivered a total of %d vehicle events to Kafka.",
+                self._message_count,
             )
